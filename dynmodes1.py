@@ -124,6 +124,7 @@ def clean_up_modes(eigenvalues, wmodes, nmodes):
     index = np.argsort(eigenvalues)
     eigenvalues = eigenvalues[index[:nmodes]]
     wmodes = wmodes[index[:nmodes]]
+
     return eigenvalues, wmodes.real
 
 
@@ -153,7 +154,7 @@ def plot_modes(Nsq, depth, nmodes, wmodes, pmodes, rmodes):
     ax = fig.add_subplot(2, 2, 1)
     # Nsq
     ax.plot(Nsq, -depth)
-    ax.ticklabel_format(style='sci', scilimits=(2, 2), axis='x')
+    # ax.ticklabel_format(style='sci', scilimits=(2, 2), axis='x')
     ax.set_ylabel('z')
     ax.set_xlabel('N^2')
     # modes
@@ -168,7 +169,7 @@ def plot_modes(Nsq, depth, nmodes, wmodes, pmodes, rmodes):
         ax = fig.add_subplot(2, 2, subplot)
         for i in range(nmodes):
             ax.plot(modes[i], -depth, label='mode {}'.format(i + 1))
-        ax.ticklabel_format(style='sci', scilimits=(3, 3), axis='x')
+        # ax.ticklabel_format(style='sci', scilimits=(3, 3), axis='x')
         ax.set_ylabel('z')
         ax.set_xlabel(title)
         ax.legend(loc='best')
