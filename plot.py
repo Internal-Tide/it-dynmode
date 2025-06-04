@@ -28,6 +28,8 @@ depth_mid[1:] = -gsw.z_from_p(p_mid, lat)  # 计算中间点的深度
 N2_f[0] = N2_f[1]  # 处理边界条件
 depth_mid[0] = 0  # 处理边界条件
 #%%
+
+#%%
 #exclude the nan values
 N2 = N2_f[~np.isnan(N2_f)]
 depth_mid = depth_mid[~np.isnan(N2_f)]

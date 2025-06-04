@@ -1,25 +1,22 @@
 from scipy import linalg
 import numpy as np
-from scipy.integrate import cumulative_trapezoid
 
-def dynmodes(Nsq, depth, nmodes, boundary='rigid', grav=9.81, method='direct'):
+def dynmodes(Nsq, depth, nmodes, boundary='rigid', grav=9.81):
     """
     DYNMODES calculates ocean dynamic vertical modes
     taking a column vector of Brunt-Vaisala values (Nsq) at
     different depths and calculating some number of dynamic modes (nmodes).
-
+    TZW (modified 2025.04.10) core code from matlab version in github, but have some revisions.
     Note: The input depths need not be uniformly spaced, 
           and the deepest depth is assumed to be the bottom.
-
-    USAGE: [wmodes, pmodes, ce] = dynmodes(Nsq, depth, nmodes, boundary, grav, method)
+    USAGE: [wmodes, pmodes, ce] = dynmodes(Nsq, depth, nmodes, boundary, grav)
 
     Inputs:  
         Nsq      = column vector of Brunt-Vaisala buoyancy frequency (s^-2)
         depth    = column vector of water depth (m, negative values)
         nmodes   = number of vertical modes to calculate 
-        boundary = boundary condition at surface: 'rigid' (default) or 'free'
-        grav     = gravitational acceleration (default: 9.81 m/s^2)
-        method   = solution method: 'direct' (default) or 'wkb' (WKB approximation)
+        boundary = boundary condition at surface: 'rigid' (default) or 'free' #(my test prove that rigid is pure baroclinic modes, free surface is barotropic(mode0)+bc modes)
+        grav     = gravitational acceleration (default: 9.81 m/s^2) #(is not important)
                
     Outputs: 
         wmodes = vertical velocity structure
@@ -28,8 +25,8 @@ def dynmodes(Nsq, depth, nmodes, boundary='rigid', grav=9.81, method='direct'):
         z      = vertical levels of wmodes
         zp     = vertical levels of pmodes (midway between z levels)
     """
+
     p = -depth
-    rho0 = 1028
 
     # Check for surface value
     n = len(p)
@@ -39,7 +36,7 @@ def dynmodes(Nsq, depth, nmodes, boundary='rigid', grav=9.81, method='direct'):
         z[1:] = -p
         N2 = np.zeros(n + 1)
         N2[0] = Nsq[0]  # Constant N2 at surface
-        # Alternative: Linear N2 at surface: N2[0] = 2*Nsq[0] - Nsq[1]
+      # Alternative: Linear N2 at surface: N2[0] = 2*Nsq[0] - Nsq[1]
         N2[1:] = Nsq
         nz = n + 1
     else:
@@ -60,17 +57,7 @@ def dynmodes(Nsq, depth, nmodes, boundary='rigid', grav=9.81, method='direct'):
     # Calculate midpoint depths for pmodes
     zh = 0.5 * (z[:-1] + z[1:])
     
-    # Choose solution method
-    if method.lower() == 'wkb':
-        return _wkb_solution(N2, z, zh, dz, nz, nmodes, boundary, grav)
-    else:  # Default to direct method
-        return _direct_solution(N2, z, zh, dz, dzm, nz, nmodes, boundary, grav)
-
-def _direct_solution(N2, z, zh, dz, dzm, nz, nmodes, boundary, grav):
-    """
-    Direct eigenvalue solution for vertical modes
-    """
-    # Get dynamic modes
+    # Direct eigenvalue solution for vertical modes
     A = np.zeros((nz, nz))
     B = np.zeros((nz, nz))
     
@@ -85,13 +72,12 @@ def _direct_solution(N2, z, zh, dz, dzm, nz, nmodes, boundary, grav):
     # Set boundary conditions
     is_rigid = boundary.lower() == 'rigid'
     if is_rigid:
-        # Rigid lid
         A[0,0] = 0
         A[nz-1,nz-1] = 0
         B[0,0] = 1
         B[nz-1,nz-1] = 1
     else:
-        # Free surface (dynamical boundary conditions)
+        # Free surface 
         A[0,0] = -1.0/dz[0]
         A[0,1] = 1.0/dz[0]
         B[0,0] = grav + 0.5*dz[0]*N2[0]
@@ -107,15 +93,23 @@ def _direct_solution(N2, z, zh, dz, dzm, nz, nmodes, boundary, grav):
     wmodes = wmodes[:, ind]
     
     # Filter out near-zero eigenvalues
-    indu = np.where(np.abs(eigvals) > 1e-8)[0]
+    indu = np.where(np.abs(eigvals) > 1e-8)[0] # if the N2 too weak,  so the eigvals too small, the modes do not exits(tzw modified 2025.04.20)
     eigvals = eigvals[indu]
     wmodes = wmodes[:, indu]
+    available_modes = eigvals.shape[0]
     
+  
+    if available_modes < nmodes:
+        print(f"警告: 只有 {available_modes} 个有效模态可用 (请求 {nmodes})，返回全NaN结果")
+        result_wmodes = np.full((nz, nmodes), np.nan)
+        result_pmodes = np.full((nz-1, nmodes), np.nan)
+        result_ce = np.full(nmodes, np.nan)
+        return result_wmodes, result_pmodes, result_ce, z, zh
     # Select requested number of modes
     eigvals = eigvals[:nmodes]
     wmodes = wmodes[:, :nmodes]
     
-    # Phase speed
+    # Eigen speed
     ce = 1.0 / np.sqrt(np.abs(eigvals))
     
     # Create pressure structure
@@ -142,71 +136,21 @@ def _direct_solution(N2, z, zh, dz, dzm, nz, nmodes, boundary, grav):
     
     return wmodes[:, :nmodes], pmodes[:, :nmodes], ce[:nmodes], z, zh
 
-def _wkb_solution(N2, z, zh, dz, nz, nmodes, boundary, grav):
-    """
-    WKB approximation for vertical modes
-    """
-    # Safety check for N2
-    N2_safe = np.maximum(N2, 1e-10)  # Avoid negative or zero N2
-    N = np.sqrt(N2_safe)
-    
-    # Total water depth
-    H = abs(z[-1])
-    
-    # Initialize output arrays
-    wmodes = np.zeros((nz, nmodes))
-    pmodes = np.zeros((nz-1, nmodes))
-    ce = np.zeros(nmodes)
-    
-    # Calculate WKB phase speeds
-    for m in range(1, nmodes+1):
-        # Modal number (first mode is m=1)
-        ce[m-1] = 1.0 / (m * np.pi) * np.trapz(N, z)
-    
-    # Calculate modes
-    for m in range(1, nmodes+1):
-        # Mode number starts at 1
-        mode_num = m
-        
-        # WKB phase
-        theta = np.zeros(nz)
-        theta[1:] = cumulative_trapezoid(N, z)
-        
-        # Vertical mode structure (vertical velocity)
-        if boundary.lower() == 'rigid':
+def preprocess_for_dynmodes(Nsq, depth):
 
-            wmodes[:, m-1] = -np.sin(mode_num * np.pi * theta / theta[-1])
-        else:
-            # Free surface
-            wmodes[:, m-1] = -np.cos(mode_num * np.pi * theta / theta[-1])
-        
-        # Horizontal velocity structure
-        for i in range(nz-1):
-            pmodes[i, m-1] = (wmodes[i, m-1] - wmodes[i+1, m-1]) / dz[i]
-        
-
-        weights = np.ones(nz)
-        weights[0] = 0.5
-        weights[-1] = 0.5
-        if nz > 2:
-            weights[1:-1] = 1.0
-            
-        # 对wmodes进行归一化
-        w_int = np.sum(weights * wmodes[:, m-1]**2 * np.append(dz, dz[-1]))
-        wnorm = np.sqrt(w_int / H)
-        wmodes[:, m-1] = wmodes[:, m-1] / wnorm
-        
-        # 对pmodes进行归一化 
-        p_weights = np.ones(nz-1)
-        p_weights[0] = 0.5
-        p_weights[-1] = 0.5
-        if nz-1 > 2:
-            p_weights[1:-1] = 1.0
-            
-        p_int = np.sum(p_weights * pmodes[:, m-1]**2 * dz)
-        pnorm = np.sqrt(p_int / H)
-        pmodes[:, m-1] = pmodes[:, m-1] / pnorm
-        
-
+    Nsq_clean = np.array(Nsq, copy=True)
+    depth_clean = np.array(depth, copy=True)
     
-    return wmodes, pmodes, ce, z, zh
+    if np.all(np.isnan(Nsq_clean)):
+        return Nsq_clean, depth_clean, False
+   
+    valid_indices = ~np.isnan(Nsq_clean)
+    if not np.all(valid_indices):
+        last_valid_idx = len(valid_indices) - 1 - np.argmax(valid_indices[::-1])
+       
+        if last_valid_idx < len(Nsq_clean) - 1:
+            Nsq_clean = Nsq_clean[:last_valid_idx + 1]
+            depth_clean = depth_clean[:last_valid_idx + 1]
+    
+
+    return Nsq_clean, depth_clean, True
