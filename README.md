@@ -1,4 +1,4 @@
-'''# Ocean Vertical Mode Solver for Internal Waves
+# Ocean Vertical Mode Solver for Internal Waves
 
 This project provides a robust and efficient Python tool, `dynmodes.py`, for calculating the vertical structure of oceanic internal waves. It solves the Sturm-Liouville eigenvalue problem for a given buoyancy frequency profile (Brunt-Väisälä frequency, $N^2$) to decompose the complex wave field into a series of orthogonal vertical modes.
 
@@ -159,4 +159,3 @@ Calculates the ocean's vertical dynamic modes based on a given stratification pr
 
 - **Klinck, J. M. (1999).** The original MATLAB implementation which inspired this project.
 - **Kelly, S. M. (2016).** The vertical mode decomposition of internal waves. *Ocean Science*, 12(5), 1105-1122. [doi:10.5194/os-12-1105-2016](https://doi.org/10.5194/os-12-1105-2016). This paper provides an excellent overview and details the normalization scheme used.
-''
